@@ -24,6 +24,25 @@ type ExampleReply struct {
 
 // Add your RPC definitions here.
 
+type TaskArgs struct {
+	Id int
+}
+
+type TaskReply struct {
+	Id int
+	Taskname string  // filename - works for both map and reduce.
+	Tasktype TaskType	// task type
+	NReduce int	
+	IsDone bool // if False => wait, else mapreduce complete.
+}
+
+type CompleteTaskArgs struct {
+	Id int
+}
+
+type CompleteTaskReply struct {
+	Ack bool
+}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.

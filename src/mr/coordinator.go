@@ -6,13 +6,56 @@ import "os"
 import "net/rpc"
 import "net/http"
 
+type TaskStatus int
+type TaskType int
+
+const (
+	Pending TaskStatus = iota
+	InProgress
+	Completed
+)
+
+const (
+	Map TaskType = iota
+	Reduce
+)
+
+type StateMap struct {
+	workerId int
+	state TaskStatus
+	startTime time.Time
+	filename string
+	taskType TaskType
+}
 
 type Coordinator struct {
 	// Your definitions here.
-
+	StateMaps map[string]StateMap
+	nReduce int
 }
 
 // Your code here -- RPC handlers for the worker to call.
+func (c * Coordinator) AssignTask(args *TaskArgs, reply *TaskReply) error {
+
+	return nil
+}
+
+// RPC handler for when a worker completes it's task
+func (c *Coordinator) CompleteTask(args *TaskArgs, reply *TaskReply) error {
+
+
+	return nil
+}
+
+// Updates the state of a map/reduce task.
+func (c *Coordinator) updateState(
+	tasktype TaskType, 
+	key string, 
+	targetState string,	
+) error {
+
+	return nil
+}
 
 //
 // an example RPC handler.
