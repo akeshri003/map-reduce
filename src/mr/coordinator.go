@@ -5,12 +5,14 @@ import "net"
 import "os"
 import "net/rpc"
 import "net/http"
+import "time"
+import "sync"
 
 type TaskStatus int
 type TaskType int
 
 const (
-	Pending TaskStatus = iota
+	Idle TaskStatus = iota
 	InProgress
 	Completed
 )
@@ -30,13 +32,72 @@ type StateMap struct {
 
 type Coordinator struct {
 	// Your definitions here.
+	mu sync.Mutex
 	StateMaps map[string]StateMap
 	nReduce int
 }
 
 // Your code here -- RPC handlers for the worker to call.
 func (c * Coordinator) AssignTask(args *TaskArgs, reply *TaskReply) error {
+	c.mu.Lock()
+	allMapDone := c.checkAllMapComplete()
+	allReduceDone := c.checkAllReduceComplete()
+	taskAssigned := false
 
+	if !allMapDone {
+		for key, val := range c.StateMaps {
+			if val.taskType == Map && val.state == Idle {
+				val.workerId = args.Id
+				val.state = InProgress
+				val.startTime = time.Now()
+				c.StateMaps[key] = val
+
+				reply.Id = val.workerId
+				reply.Taskname = val.filename
+				reply.Tasktype = Map
+				reply.NReduce = c.nReduce
+				reply.IsDone = false
+				taskAssigned = true
+				break
+			}
+		}
+		if !taskAssigned {
+			reply.Id = args.Id
+			reply.IsDone = false
+			reply.Taskname = ""
+			reply.Tasktype = Map
+			reply.NReduce = c.nReduce
+		}
+	} else if !allReduceDone {
+		for key, val := range c.StateMaps {
+			if val.taskType == Reduce && val.state == Idle {
+				val.workerId = args.Id
+				val.state = InProgress
+				val.startTime = time.Now()
+				c.StateMaps[key] = val
+
+				reply.Id = val.workerId
+				reply.Taskname = val.filename
+				reply.Tasktype = Reduce
+				reply.NReduce = c.nReduce
+				reply.IsDone = false
+				taskAssigned = true
+				break
+			}
+		}
+		if !taskAssigned {
+			reply.Id = args.Id
+			reply.IsDone = false
+			reply.Taskname = ""
+			reply.Tasktype = Reduce
+			reply.NReduce = c.nReduce
+		}
+	} else {
+		reply.Id = args.Id
+		reply.IsDone = true
+	}
+
+	c.mu.Unlock()
 	return nil
 }
 
@@ -55,6 +116,32 @@ func (c *Coordinator) updateState(
 ) error {
 
 	return nil
+}
+
+func (c *Coordinator) checkAllMapComplete() bool {
+	
+	for _, v := range c.StateMaps {
+		if v.taskType == Map && v.state != Completed {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (c *Coordinator) checkAllReduceComplete() bool {
+
+	for _, v := range c.StateMaps {
+		if v.taskType == Reduce && v.state != Completed {
+			return false
+		}
+	}
+
+	return true
+}
+
+func backgroundWorkerHealthChecker() {
+
 }
 
 //
@@ -92,8 +179,11 @@ func (c *Coordinator) Done() bool {
 	ret := false
 
 	// Your code here.
+	c.mu.Lock()
 
-
+	ret = c.checkAllReduceComplete()
+	
+	defer c.mu.Unlock()
 	return ret
 }
 
@@ -104,9 +194,19 @@ func (c *Coordinator) Done() bool {
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
+	c.nReduce = nReduce
+	c.StateMaps = make(map[string]StateMap)
 
-	// Your code here.
-
+	for _, file := range files {
+		task := StateMap{}
+		task.state = Idle
+		task.filename = file
+		task.taskType = Map
+		task.workerId = -1
+		task.startTime = time.Time{}
+		c.StateMaps[file] = task
+	}
+	
 
 	c.server()
 	return &c
